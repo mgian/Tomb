@@ -13,13 +13,18 @@
 
 *A minimalistic commandline tool to manage encrypted volumes* aka **The Crypto Undertaker**
 
-![](https://github.com/dyne/Tomb/blob/master/extras/images/monmort.png)
+[![software by Dyne.org](https://www.dyne.org/wp-content/uploads/2015/12/software_by_dyne.png)](http://www.dyne.org)
 
 Updates on website: https://www.dyne.org/software/tomb
 
 Get the stable .tar.gz signed release for production use!
 
 Download it from https://files.dyne.org/tomb
+
+![tomb's logo](https://github.com/dyne/Tomb/blob/master/extras/images/monmort.png)
+
+[![Build Status](https://travis-ci.org/dyne/Tomb.svg?branch=master)](https://travis-ci.org/dyne/Tomb)
+
 
 # What is Tomb, the crypto undertaker?
 
@@ -66,7 +71,7 @@ For the instructions on how to get started using Tomb, see [INSTALL](INSTALL.md)
    lock    installs a lock on a TOMB to use it with KEY
 
    // Operations on tombs:
-   open    open an existing TOMB
+   open    open an existing TOMB (-k specify KEY file)
    index   update the search indexes of tombs
    search  looks for filenames matching text patterns
    list    list of open TOMBs and information on them
@@ -210,9 +215,7 @@ IRC on https://irc.dyne.org channel **#dyne** (or direct port 9999 SSL)
 
 # Licensing
 
-Tomb is Copyright (C) 2007-2015 by the Dyne.org Foundation
-
-Tomb is designed, written and maintained by Denis Roio <jaromil@dyne.org>
+Tomb is Copyright (C) 2007-2016 by the Dyne.org Foundation
 
 More information on all the developers involved is found in the
 [AUTHORS](AUTHORS.md) file.

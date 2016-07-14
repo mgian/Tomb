@@ -132,6 +132,12 @@ To have it change directory `extras/gtk-tray` then
 
 Of cource one can include the launch of tomb-gtk-tray scripts.
 
+### extras/qt-tray
+
+The QT tray adds a tomb tray in a QT desktop toolbar. It requires at
+least QT libraries of version 5.4 or above.
+Build with 'qmake' and then 'make'.
+
 ### extras/kdf-keys
 
 The KDF wrapper programs allows one to use KDF rounds on passwords in
@@ -159,14 +165,23 @@ Please note that it doesn't makes much sense to use KDF keys and
 steganography, since the latter will invalidate the brute-forcing
 protection. For details on the issue see [KNOWN_BUGS.md](KNOWN_BUGS).
 
-### extras/po (translations)
+### extras/translations/
 
 There are translations available for Tomb and they are installed by
 default. If you wish to update them manually navigate to extras/po
 and run 'make install' as root:
 
-    cd extras/po
+    cd extras/translations
     sudo make install
+
+### extras/gtomb/
+
+This is a minimalistic graphical user interface scripted in ZSh
+depending from Zenity to display dialog boxes. It covers all basic
+operations in Tomb and facilitates the setup of hooks.
+
+    cd extras/gtomb
+    ./gtomb
 
 # Tomb support in other applications
 

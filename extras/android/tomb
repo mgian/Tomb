@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/data/data/com.termux/files/usr/bin/zsh
 #
 # Tomb, the Crypto Undertaker
 #
@@ -44,8 +44,8 @@
 
 # {{{ Global variables
 
-typeset VERSION="2.2"
-typeset DATE="Dec/2015"
+typeset VERSION="2.2-android"
+typeset DATE="Jan/2016"
 typeset TOMBEXEC=$0
 typeset TMPPREFIX=${TMPPREFIX:-/tmp}
 # TODO: configure which tmp dir to use from a cli flag
@@ -65,9 +65,9 @@ WIPE=(rm -f)
 PINENTRY=(pinentry)
 
 # load zsh regex module
-zmodload zsh/regex
-zmodload zsh/mapfile
-zmodload -F zsh/stat b:zstat
+#zmodload zsh/regex
+#zmodload zsh/mapfile
+#zmodload -F zsh/stat b:zstat
 
 # make sure variables aren't exported
 unsetopt allexport
@@ -86,12 +86,6 @@ typeset      MOUNTOPTS="rw,noatime,nodev"
 unsetopt CASE_MATCH
 
 typeset -AH OPTS              # Command line options (see main())
-
-# Command context (see _whoami())
-typeset -H  _USER             # Running username
-typeset -Hi _UID              # Running user identifier
-typeset -Hi _GID              # Running user group identifier
-typeset -H  _TTY              # Connected input terminal
 
 # Tomb context (see _plot())
 typeset -H TOMBPATH           # Full path to the tomb
@@ -120,15 +114,7 @@ export TEXTDOMAIN=tomb
 # {{{ Safety functions
 
 # Wrap sudo with a more visible message
-_sudo() {
-    local sudo_eng="[sudo] Enter password for user ::1 user:: to gain superuser privileges"
-    local msg="$(gettext -s "$sudo_eng")"
-    msg=${(S)msg//::1*::/$USER}
-    sudo -p "
-$msg
-
-" ${@}
-}
+_sudo() { su -c "${@}" }
 
 # Cleanup anything sensitive before exiting.
 _endgame() {
@@ -174,58 +160,13 @@ TRAPPIPE() { _endgame PIPE  }
 TRAPTERM() { _endgame TERM  }
 TRAPSTOP() { _endgame STOP  }
 
-_cat() { local -a _arr;
-    # read file using mapfile, newline fix
-    _arr=("${(f@)${mapfile[${1}]%$’\n’}}"); print "$_arr"
-}
+_cat() { cat }
 
 _is_found() {
     # returns 0 if binary is found in path
     [[ "$1" = "" ]] && return 1
     command -v "$1" 1>/dev/null 2>/dev/null
     return $?
-}
-
-# Identify the running user
-# Set global variables _UID, _GID, _TTY, and _USER, either from the
-# command line, -U, -G, -T, respectively, or from the environment.
-# Also update USERNAME and HOME to maintain consistency.
-_whoami() {
-
-    # Set username from UID or environment
-    _USER=$SUDO_USER
-    [[ "$_USER" = "" ]] && { _USER=$USERNAME }
-    [[ "$_USER" = "" ]] && { _USER=$(id -u)  }
-    [[ "$_USER" = "" ]] && {
-        _failure "Failing to identify the user who is calling us" }
-
-    # Get GID from option -G or the environment
-    option_is_set -G \
-        && _GID=$(option_value -G) || _GID=$(id -g $_USER)
-
-    # Get UID from option -U or the environment
-    option_is_set -U \
-        && _UID=$(option_value -U) || _UID=$(id -u $_USER)
-
-    _verbose "Identified caller: ::1 username:: (::2 UID:::::3  GID::)" $_USER $_UID $_GID
-
-    # Update USERNAME accordingly if possible
-    [[ $EUID == 0 && $_USER != $USERNAME ]] && {
-        _verbose "Updating USERNAME from '::1 USERNAME::' to '::2 _USER::')" $USERNAME $_USER
-        USERNAME=$_USER
-    }
-
-    # Force HOME to _USER's HOME if necessary
-    local home=$(awk -F: "/^$_USER:/ { print \$6 }" /etc/passwd 2>/dev/null)
-    [[ $home == $HOME ]] || {
-        _verbose "Updating HOME to match user's: ::1 home:: (was ::2 HOME::)" \
-            $home $HOME
-        HOME=$home }
-
-    # Get connecting TTY from option -T or the environment
-    option_is_set -T && _TTY=$(option_value -T)
-    [[ -z $_TTY ]]   && _TTY=$TTY
-
 }
 
 # Define sepulture's plot (setup tomb-related arguments)
@@ -473,13 +414,13 @@ EOF`
 
     # parse the pinentry output
     for i in ${(f)output}; do
-        [[ "$i" =~ "^ERR.*" ]] && {
+        print "$i" | grep "^ERR.*" && {
             _warning "Pinentry error: ::1 error::" ${i[(w)3]}
             print "canceled"
             return 1 }
 
         # here the password is found
-        [[ "$i" =~ "^D .*" ]] && password="${i##D }"
+        print "$i" | grep "^D .*" && password="${i##D }"
     done
 
     [[ "$password" = "" ]] && {
@@ -491,7 +432,13 @@ EOF`
     return 0
 }
 
-
+# Android hasn't real mtab, we maintain our own for tombs
+mount_list() { [[ -r $HOME/.tomb/mtab ]] && cat $HOME/.tomb/mtab }
+mount_add_tomb_mtab() {
+    mkdir -p $HOME/.tomb
+    touch $HOME/.tomb/mtab
+    print "$1;$2;ext2;$MOUNTOPTS;[$TOMBNAME]" >> $HOME/.tomb/mtab
+}
 
 # Check if a filename is a valid tomb
 is_valid_tomb() {
@@ -516,11 +463,6 @@ is_valid_tomb() {
         _fail=1
     }
 
-    _uid="`zstat +uid $1`"
-    [[ "$_uid"  = "$UID" ]] || {
-        _user="`zstat -s +uid $1`"
-        _warning "Tomb file is owned by another user: ::1 tomb owner::" $_user
-    }
     [[ $_fail = 1 ]] && {
         _failure "Tomb command failed: ::1 command name::" $subcommand
     }
@@ -530,13 +472,13 @@ is_valid_tomb() {
     # whether we can alter it.
 
     # Tomb file may be a LUKS FS (or we are creating it)
-    [[ "`file $1`" =~ "luks encrypted file" ]] || {
+    file $1 | grep "luks encrypted file" || {
         _warning "File is not yet a tomb: ::1 tomb file::" $1 }
 
     _plot $1     # Set TOMB{PATH,DIR,FILE,NAME}
 
     # Tomb already mounted (or we cannot alter it)
-    [[ "`mount -l`" -regex-match "${TOMBFILE}.*\[$TOMBNAME\]$" ]] && {
+    mount_list | grep "${TOMBFILE}.*\[$TOMBNAME\]$" && {
         _failure "Tomb is currently in use: ::1 tomb name::" $TOMBNAME
     }
 
@@ -549,8 +491,11 @@ is_valid_tomb() {
 lo_mount() {
     tpath="$1"
 
+    # TODO: Android always reports loop0 as next
+    #       we need to implement our own loop table
+
     # check if we have support for loop mounting
-    _nstloop=`_sudo losetup -f`
+    _nstloop=`losetup -f`
     [[ $? = 0 ]] || {
         _warning "Loop mount of volumes is not possible on this machine, this error"
         _warning "often occurs on VPS and kernels that don't provide the loop module."
@@ -780,13 +725,13 @@ _list_optional_tools() {
 _ensure_dependencies() {
 
     # Check for required programs
-    for req in cryptsetup pinentry sudo gpg mkfs.ext4 e2fsck; do
+    for req in pinentry gpg mkfs.ext2 e2fsck; do
         command -v $req 1>/dev/null 2>/dev/null || {
             _failure "Missing required dependency ::1 command::.  Please install it." $req }
     done
 
     # Ensure system binaries are available in the PATH
-    path+=(/sbin /usr/sbin) # zsh magic
+    path+=(/sbin /usr/sbin /system/xbin) # zsh magic
 
     # Which dd command to use
     command -v dcfldd 1>/dev/null 2>/dev/null && DD=(dcfldd statusinterval=1)
@@ -832,12 +777,12 @@ is_valid_key() {
 
     # If the key file is an image don't check file header
     [[ -r $TOMBKEYFILE ]] \
-        && [[ $(file $TOMBKEYFILE) =~ "JP.G" ]] \
+        && file $TOMBKEYFILE | grep "JP.G" \
         && {
         _message "Key is an image, it might be valid."
         return 0 }
 
-    [[ $key =~ "BEGIN PGP" ]] && {
+    print $key | grep "BEGIN PGP" && {
         _message "Key is valid."
         return 0 }
 
@@ -889,7 +834,7 @@ _load_key() {
         _verbose "load_key argument: ::1 key file::" $keyfile
         [[ -r $keyfile ]] || _failure "Key not found, specify one using -k."
         TOMBKEYFILE=$keyfile
-        TOMBKEY="${mapfile[$TOMBKEYFILE]}"
+        TOMBKEY="`cat $TOMBKEYFILE`"
     fi
 
     _verbose "load_key: ::1 key::" $TOMBKEYFILE
@@ -940,7 +885,7 @@ gpg_decrypt() {
 
         ret=1
 
-        [[ "${gpgstatus}" =~ "DECRYPTION_OKAY" ]] && { ret=0 }
+        print - "${gpgstatus}" | grep "DECRYPTION_OKAY" && { ret=0 }
 
 
     }
@@ -961,7 +906,7 @@ get_lukskey() {
     firstline="${TOMBKEY[(f)1]}"
 
     # key is KDF encoded
-    if [[ $firstline =~ '^_KDF_' ]]; then
+    if print - "$firstline" | grep '^_KDF_'; then
         kdf_hash="${firstline[(ws:_:)2]}"
         _verbose "KDF: ::1 kdf::" "$kdf_hash"
         case "$kdf_hash" in
@@ -983,9 +928,10 @@ get_lukskey() {
         esac
 
         # key needs to be exhumed from an image
-    elif [[ -r $TOMBKEYFILE && $(file $TOMBKEYFILE) =~ "JP.G" ]]; then
+        # TODO
+#    elif [[ -r $TOMBKEYFILE && print $(file $TOMBKEYFILE) |grep "JP.G" ]]; then
 
-        exhume_key $TOMBKEYFILE "$_password"
+#       exhume_key $TOMBKEYFILE "$_password"
 
     fi
 
@@ -1090,7 +1036,7 @@ change_passwd() {
         gen_key >> "$tmpnewkey"
     }
 
-    { is_valid_key "${mapfile[$tmpnewkey]}" } || {
+    { is_valid_key "`cat $tmpnewkey`" } || {
         _failure "Error: the newly generated keyfile does not seem valid." }
 
     # Copy the new key as the original keyfile name
@@ -1509,13 +1455,13 @@ forge_key() {
     }
 
     # load the key contents (set global variable)
-    TOMBKEY="${mapfile[$TOMBKEYFILE]}"
+    TOMBKEY="`cat $TOMBKEYFILE`"
 
     # this does a check on the file header
     is_valid_key $TOMBKEY || {
         _warning "The key does not seem to be valid."
         _warning "Dumping contents to screen:"
-        print "${mapfile[$TOMBKEY]}"
+        print "`cat $TOMBKEY`"
         _warning "--"
         _sudo umount ${keytmp}
         rm -r $keytmp
@@ -1538,7 +1484,7 @@ lock_tomb_with_key() {
     # old default was aes-cbc-essiv:sha256
     # Override with -o
     # for more alternatives refer to cryptsetup(8)
-    local cipher="aes-xts-plain64:sha256"
+    local cipher="aes-cbc-essiv:sha256"
 
     local tombpath="$1"      # First argument is the path to the tomb
 
@@ -1563,8 +1509,8 @@ lock_tomb_with_key() {
     _verbose "Loop mounted on ::1 mount point::" $nstloop
 
     _message "Checking if the tomb is empty (we never step on somebody else's bones)."
-    _sudo cryptsetup isLuks ${nstloop}
-    if [ $? = 0 ]; then
+    su -c cryptsetup isLuks ${nstloop}
+    if [[ $? = 0 ]]; then
         # is it a LUKS encrypted nest? then bail out and avoid reformatting it
         _warning "The tomb was already locked with another key."
         _failure "Operation aborted. I cannot lock an already locked tomb. Go dig a new one."
@@ -1604,8 +1550,8 @@ lock_tomb_with_key() {
         _warning "cryptsetup luksOpen returned an error."
         _failure "Operation aborted." }
 
-    _message "Formatting your Tomb with Ext3/Ext4 filesystem."
-    _sudo mkfs.ext4 -q -F -j -L $TOMBNAME /dev/mapper/tomb.tmp
+    _message "Formatting your Tomb with Ext3/Ext2 filesystem."
+    _sudo mkfs.ext2 -q -F -j -L $TOMBNAME /dev/mapper/tomb.tmp
 
     [[ $? == 0 ]] || {
         _warning "Tomb format returned an error."
@@ -1727,10 +1673,9 @@ mount_tomb() {
 
     tombmount="$2"
     [[ "$tombmount" = "" ]] && {
-        tombmount=/media/$TOMBNAME
-        [[ -d /media ]] || { # no /media found, adopting /run/media/$USER (udisks2 compat)
-            tombmount=/run/media/$_USER/$TOMBNAME
-        }
+        # Android default in app's home/media
+        tombmount="$HOME/media/$TOMBNAME"
+        mkdir -p $tombmount
         _message "Mountpoint not specified, using default: ::1 mount point::" $tombmount
     }
 
@@ -1795,7 +1740,7 @@ mount_tomb() {
     _verbose "Key size is ::1 size:: for cipher ::2 cipher::" $tombstat[2] $tombstat[1]
 
     _message "Checking filesystem via ::1::" $tombstat[3]
-    _sudo fsck -p -C0 /dev/mapper/${mapper}
+    _sudo e2fsck -p -C0 /dev/mapper/${mapper}
     _verbose "Tomb engraved as ::1 tomb name::" $TOMBNAME
     _sudo tune2fs -L $TOMBNAME /dev/mapper/${mapper} > /dev/null
 
@@ -1809,7 +1754,7 @@ mount_tomb() {
 
     # TODO: safety check MOUNTOPTS
     # safe_mount_options && \
-    _sudo mount -o $MOUNTOPTS /dev/mapper/${mapper} ${tombmount}
+    _sudo mount -t ext2 -o $MOUNTOPTS /dev/mapper/${mapper} ${tombmount}
     # Clean up if the mount failed
     [[ $? == 0 ]] || {
         _warning "Error mounting ::1 mapper:: on ::2 tombmount::" $mapper $tombmount
@@ -1822,6 +1767,9 @@ mount_tomb() {
         _failure "Cannot mount ::1 tomb name::" $TOMBNAME
     }
 
+    # Add to Android's own mtab
+    mount_add_tomb_mtab /dev/mapper/$mapper $tombmount
+
     _sudo chown $UID:$GID ${tombmount}
     _sudo chmod 0711 ${tombmount}
 
@@ -1830,28 +1778,28 @@ mount_tomb() {
     local tombtty tombhost tombuid tombuser
 
     # print out when it was opened the last time, by whom and where
-    [[ -r ${tombmount}/.last ]] && {
-        tombsince=$(_cat ${tombmount}/.last)
-        tombsince=$(date --date=@$tombsince +%c)
-        tombtty=$(_cat ${tombmount}/.tty)
-        tombhost=$(_cat ${tombmount}/.host)
-        tomblast=$(_cat ${tombmount}/.last)
-        tombuid=$(_cat ${tombmount}/.uid | tr -d ' ')
+#    [[ -r ${tombmount}/.last ]] && {
+#        tombsince=$(_cat ${tombmount}/.last)
+#        tombsince=$(date --date=@$tombsince +%c)
+#        tombtty=$(_cat ${tombmount}/.tty)
+#        tombhost=$(_cat ${tombmount}/.host)
+#        tomblast=$(_cat ${tombmount}/.last)
+#        tombuid=$(_cat ${tombmount}/.uid | tr -d ' ')
 
-        tombuser=$(getent passwd $tombuid)
-        tombuser=${tombuser[(ws@:@)1]}
+#        tombuser=$(getent passwd $tombuid)
+#        tombuser=${tombuser[(ws@:@)1]}
 
-        _message "Last visit by ::1 user::(::2 tomb build::) from ::3 tty:: on ::4 host::" $tombuser $tombuid $tombtty $tombhost
-        _message "on date ::1 date::" $tombsince
-    }
+#        _message "Last visit by ::1 user::(::2 tomb build::) from ::3 tty:: on ::4 host::" $tombuser $tombuid $tombtty $tombhost
+#        _message "on date ::1 date::" $tombsince
+#    }
     # write down the UID and TTY that opened the tomb
-    rm -f ${tombmount}/.uid
-    print $_UID > ${tombmount}/.uid
-    rm -f ${tombmount}/.tty
-    print $_TTY > ${tombmount}/.tty
+#    rm -f ${tombmount}/.uid
+#    print $_UID > ${tombmount}/.uid
+#    rm -f ${tombmount}/.tty
+#    print $_TTY > ${tombmount}/.tty
     # also the hostname
-    rm -f ${tombmount}/.host
-    hostname > ${tombmount}/.host
+    # rm -f ${tombmount}/.host
+    # hostname > ${tombmount}/.host
     # and the "last time opened" information
     # in minutes since 1970, this is printed at next open
     rm -f ${tombmount}/.last
@@ -1987,14 +1935,14 @@ list_tombs() {
         tombfsopts=${t[(ws:;:)4]}
         tombloop=${mapper[(ws:.:)4]}
 
-        # calculate tomb size
-        ts=`df -hP /dev/mapper/$mapper |
-awk "/mapper/"' { print $2 ";" $3 ";" $4 ";" $5 }'`
-        tombtot=${ts[(ws:;:)1]}
-        tombused=${ts[(ws:;:)2]}
-        tombavail=${ts[(ws:;:)3]}
-        tombpercent=${ts[(ws:;:)4]}
-        tombp=${tombpercent%%%}
+        # calculate tomb size (TODO Android)
+#        ts=`df /dev/mapper/$mapper |
+#awk "/mapper/"' { print $2 ";" $3 ";" $4 ";" $5 }'`
+#        tombtot=${ts[(ws:;:)1]}
+#        tombused=${ts[(ws:;:)2]}
+#        tombavail=${ts[(ws:;:)3]}
+#        tombpercent=${ts[(ws:;:)4]}
+#        tombp=${tombpercent%%%}
 
         # obsolete way to get the last open date from /dev/mapper
         # which doesn't work when tomb filename contain dots
@@ -2002,13 +1950,13 @@ awk "/mapper/"' { print $2 ";" $3 ";" $4 ";" $5 }'`
 
         # find out who opens it from where
         [[ -r ${tombmount}/.tty ]] && {
-            tombsince=$(_cat ${tombmount}/.last)
-            tombsince=$(date --date=@$tombsince +%c)
-            tombtty=$(_cat ${tombmount}/.tty)
-            tombhost=$(_cat ${tombmount}/.host)
-            tombuid=$(_cat ${tombmount}/.uid | tr -d ' ')
+#            tombsince=$(_cat ${tombmount}/.last)
+#            tombsince=$(date --date=@$tombsince +%c)
+#            tombtty=$(_cat ${tombmount}/.tty)
+#            tombhost=$(_cat ${tombmount}/.host)
+#            tombuid=$(_cat ${tombmount}/.uid | tr -d ' ')
 
-            tombuser=$(getent passwd $tombuid)
+#            tombuser=$(getent passwd $tombuid)
             tombuser=${tombuser[(ws@:@)1]}
         }
 
@@ -2019,26 +1967,26 @@ awk "/mapper/"' { print $2 ";" $3 ";" $4 ";" $5 }'`
 
         _verbose "::1 tombname:: /dev/::2 tombloop:: device mounted (detach with losetup -d)" $tombname $tombloop
 
-        _message "::1 tombname:: open since ::2 tombsince::" $tombname $tombsince
+#        _message "::1 tombname:: open since ::2 tombsince::" $tombname $tombsince
 
-        [[ -z "$tombtty" ]] || {
-            _message "::1 tombname:: open by ::2 tombuser:: from ::3 tombtty:: on ::4 tombhost::" \
-                $tombname $tombuser $tombtty $tombhost
-        }
+#        [[ -z "$tombtty" ]] || {
+#            _message "::1 tombname:: open by ::2 tombuser:: from ::3 tombtty:: on ::4 tombhost::" \
+#                $tombname $tombuser $tombtty $tombhost
+#        }
 
-        _message "::1 tombname:: size ::2 tombtot:: of which ::3 tombused:: (::5 tombpercent::%) is used: ::4 tombavail:: free " \
-            $tombname $tombtot $tombused $tombavail $tombpercent
+#        _message "::1 tombname:: size ::2 tombtot:: of which ::3 tombused:: (::5 tombpercent::%) is used: ::4 tombavail:: free " \
+#            $tombname $tombtot $tombused $tombavail $tombpercent
 
-        [[ ${tombp} -ge 90 ]] && {
-            _warning "::1 tombname:: warning: your tomb is almost full!" $tombname
-        }
+#        [[ ${tombp} -ge 90 ]] && {
+#            _warning "::1 tombname:: warning: your tomb is almost full!" $tombname
+#        }
 
-        # Now check hooks
-        mounted_hooks=(`list_tomb_binds $tombname $tombmount`)
-        for h in ${mounted_hooks}; do
-            _message "::1 tombname:: hooks ::2 hookname:: on ::3 hookdest::" \
-                $tombname "`basename ${h[(ws:;:)1]}`" ${h[(ws:;:)2]}
-        done
+        # Now check hooks (TODO Android)
+#        mounted_hooks=(`list_tomb_binds $tombname $tombmount`)
+#        for h in ${mounted_hooks}; do
+#            _message "::1 tombname:: hooks ::2 hookname:: on ::3 hookdest::" \
+#                $tombname "`basename ${h[(ws:;:)1]}`" ${h[(ws:;:)2]}
+#        done
     done
 }
 
@@ -2059,30 +2007,10 @@ awk "/mapper/"' { print $2 ";" $3 ";" $4 ";" $5 }'`
 #
 # 5. tomb name
 list_tomb_mounts() {
-    [[ -z "$1" ]] && {
-        # list all open tombs
-        mount -l \
-            | awk '
-BEGIN { main="" }
-/^\/dev\/mapper\/tomb/ {
-  if(main==$1) next;
-  print $1 ";" $3 ";" $5 ";" $6 ";" $7
-  main=$1
-}
-'
-    } || {
-        # list a specific tomb
-        mount -l \
-            | awk -vtomb="[$1]" '
-BEGIN { main="" }
-/^\/dev\/mapper\/tomb/ {
-  if($7!=tomb) next;
-  if(main==$1) next;
-  print $1 ";" $3 ";" $5 ";" $6 ";" $7
-  main=$1
-}
-'
-    }
+    # list all open tombs
+    if [[ "$1" = "" ]]; then mount_list;
+    # list a specific tomb
+    else mount_list | grep "${1}$"; fi
 }
 
 # list_tomb_binds
@@ -2099,7 +2027,7 @@ list_tomb_binds() {
 
     typeset -A tombs
     typeset -a binds
-    for t in "${(f)$(mount -l | grep '/dev/mapper/tomb.*]$')}"; do
+    for t in "${(f)$(mount_list | grep '/dev/mapper/tomb.*]$')}"; do
         len="${(w)#t}"
         [[ "${t[(w)$len]}" = "$1" ]] || continue
         tombs+=( ${t[(w)1]} ${t[(w)$len]} )
@@ -2313,7 +2241,7 @@ resize_tomb() {
     _load_key # Try loading new key from option -k and set TOMBKEYFILE
 
     local oldtombsize=$(( `stat -c %s "$TOMBPATH" 2>/dev/null` / 1048576 ))
-    local mounted_tomb=`mount -l |
+    local mounted_tomb=`mount_list |
         awk -vtomb="[$TOMBNAME]" '/^\/dev\/mapper\/tomb/ { if($7==tomb) print $1 }'`
 
     # Tomb must not be open
@@ -2462,8 +2390,7 @@ umount_tomb() {
         tombname_regex=${tombname//\[/}
         tombname_regex=${tombname_regex//\]/}
 
-        [[ "$tombmount" -regex-match "[/run]?/media[/$_USER]?/$tombname_regex" ]] && {
-            _sudo rmdir $tombmount }
+        rmdir $tombmount
 
         _sudo cryptsetup luksClose $mapper
         [[ $? == 0 ]] || {
@@ -2655,7 +2582,6 @@ main() {
 
     # When we run as root, we remember the original uid:gid to set
     # permissions for the calling user and drop privileges
-    _whoami # Reset _UID, _GID, _TTY
 
     [[ "$PARAM" == "" ]] && {
         _verbose "Tomb command: ::1 subcommand::" $subcommand
