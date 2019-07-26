@@ -1,3 +1,29 @@
+# Cryptsetup change of default to luks2
+## Issue opening tombs with cryptsetup >2.0
+
+Tomb uses the cryptsetup LUKS volume header default to type luks1
+which has been for long the default in cryptsetup. But starting from
+cryptsetup v2.1 a new default has been introduced (luks2) and the
+--type option added to specify the old luks1.
+
+Using Tomb version 2.6 (and future releases) the problem opening tombs
+using recent GNU/Linux distributions is fixed.
+
+# Whitespaces in KDF passwords
+## Issue affecting passwords used with PBKDF2 keys (<2.6)
+
+ Up until and including Tomb's version 2.5 the PBKDF2 wrapper for keys
+ in Tomb has a bug affecting passwords that contain whitespaces. Since
+ the passwords are trimmed at the first whitespace, this makes them
+ weaker, while fortunately the KDF transformation still applies.
+
+ This issue is fixed in Tomb version 2.6: all users adopting KDF keys
+ that have passwords containing whitespaces should change them,
+ knowing that their "old password" is trimmed until the whitespace.
+
+ Users adopting GPG keys or plain (without KDF wrapper) can ignore
+ this bug.
+
 # Vulnerability to password bruteforcing
 ## Issue affecting keys used in steganography
 
@@ -23,6 +49,18 @@
  a good practice to change it using the `setkey` command on a secure
  machine, possibly while off-line or in single user mode.
 
+# Ending newline in tomb keys
+## 2.2
+
+ When used to forge new keys, Tomb version 2.2 incorrectly added a new
+ line ('\n', 0x0A) character at the end of each key's secret sequence
+ before encoding it with GnuPG. This does not affect Tomb regression
+ and compatibility with other Tomb versions as this final newline is
+ ignored in any case, but third party software may have
+ problems. Those writing a software that supports opening Tomb files
+ should always ignore the final newline when present in the secret
+ material obtained after decoding the key with the password.
+ 
 # Versioning and stdin key
 ## 1.5
 

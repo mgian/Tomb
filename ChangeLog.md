@@ -1,5 +1,68 @@
 # Tomb ChangeLog
 
+## 2.6
+### May 2019
+
+This release adds new features and provides an important fix for usage
+of Tomb with cryptsetup 2.1 and future versions; it also fixes a
+whitespace bug in KDF passwords, all fixes are documented in
+KNOWN_BUGS. A notable new feature is the libsphinx integration for
+password-authenticated key agreement (PAKE). Another feature is the
+integration of cloakify to support new cloak/uncloak commands that
+hide keys inside long text files. Also support for gpg sub-keys has
+been added and overall gpg asymmetric key protection is improved.
+
+
+
+## 2.5
+### January 2018
+
+This is mostly a bugfix release, including two internal
+refactorings. An important change is the re-introduction (since v2.3)
+of ownership change of all files inside tombs, to facilitate single
+user usage, which is now default and can be prevented using the '-p'
+flag on 'open' commands. The first refactoring concerns the test
+units, now using the 'sharness' framework. The other refactoring
+concerns 'post-hooks' now renamed to 'exec-hooks' and launched on
+'open' and 'close' commands with a defined set of arguments. Another
+internal change concerns the use of 'findmnt' instead of parsing the
+output of 'mount -l', which grants compatibility with more recent
+versions of util-linux. A fix was made to the 'slam' command for a
+better process detection and the introduction of a new 'ps' command to
+just list processes using tombs. Another fix was made to support tomb
+hidden filenames (starting with a dot) without any extension. Some
+more minor fixes were made to messaging and translations, plus all the
+documentation is updated.
+
+
+## 2.4
+### April 2017
+
+This release introduces a major new feature with support for
+asymmetric encryption of Tomb keys using public/private GPG key
+pairs. It is now possible to protect a Tomb key using a GPG key (which
+can also be password-less for automations) as well encrypt a Tomb key
+for multiple recipients (list of GPG ids). Other improvements include:
+a fix to the 'slam' command with better detection of running programs
+using 'lsof' (new optional dependency); a fix to 'forge' key creation
+to really use 512 bits long keys to really trigger usage of AES256;
+correct support for opening tombs in read-only mode; update of the
+Tomber python wrapper in extras. Documentation has been updated.
+
+## 2.3
+### January 2017
+
+Fix to bug occurring when using ZSh version 5.3 or higher. Fix to
+inclusion of final newline in keys generated with 2.2, only affecting
+third-party software. Removed chmod/chown of tombs when open. Enhanced
+continuous integration script with regression tests with usage of old
+stable versions of Tomb and shellcheck linting.  Improved parser and
+post-hooks to avoid usage of external binaries (grep and cat) also
+improving security when decrypting keys. Fix for clean execution via
+sudo nopasswd. Updated extras/gtomb to latest stable version.  Various
+documentation updates about kdf, using images as keys, deniability and
+gpg-agent usage. New experimental port to Android platforms in extras.
+
 ## 2.2
 ### December 2015
 

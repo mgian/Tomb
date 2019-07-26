@@ -47,7 +47,7 @@ foreach (@lines) {
     $force = 0;
 
     # It's a fold title
-    if (m/^# +{{{ +(.*)$/) {
+    if (m/^# +\{\{\{ +(.*)$/) {
         $fold = $1;
         next;
     }
@@ -71,6 +71,9 @@ foreach (@lines) {
     else {
         $str = $2;
     }
+
+    # Remove conflicting quotes (\)
+    $str =~ s/\\\$/\$/g;
 
     # Next if it was seen before
     $seen{$str}++;
